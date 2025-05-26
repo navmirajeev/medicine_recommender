@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Alternate Medicine Finder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f8fafd;
+            text-align: center;
+            padding: 50px;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            width: 300px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-left: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .medicine-card {
+            text-align: left;
+            margin: 20px auto;
+            max-width: 600px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background: white;
+        }
+        .medicine-card h4 {
+            margin-top: 0;
+        }
+        strong {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Alternate Medicine Finder</h1>
+    <input type="text" id="medicineInput" placeholder="Enter medicine name (e.g., augmentin)" />
+    <button onclick="findAlternatives()">Search</button>
+    <div id="result"></div>
+
+    <script>
+        async function findAlternatives() {
+            const input = document.getElementById('medicineInput').value.trim();
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = "Searching...";
+
+            try {
+                const response = await fetch(`/recommend?medicine=${encodeURIComponent(input)}`);
+                const data = await response.json();
+
+                if (data.recommendations && data.recommendations.length > 0) {
+                    let html = "<h3>Alternatives:</h3>";
+                    data.recommendations.forEach(med => {
+                        html += `<div class="medicine-card">
+                            <h4>${med.name} (ID: ${med.id})</h4>
+                            <p><strong>Substitutes:</strong> ${
+                                [med.substitute0, med.substitute1, med.substitute2, med.substitute3, med.substitute4].filter(Boolean).join(", ") || "None"
+                            }</p>
+                            <p><strong>Side Effects:</strong> ${
+                                Array.from({length: 42}, (_, i) => med["sideEffect" + i])
+                                     .filter(Boolean)
+                                     .join(", ") || "None"
+                            }</p>
+                            <p><strong>Uses:</strong> ${
+                                [med.use0, med.use1, med.use2, med.use3, med.use4].filter(Boolean).join(", ") || "None"
+                            }</p>
+                            <p><strong>Chemical Class:</strong> ${med["Chemical Class"] || "N/A"}</p>
+                            <p><strong>Habit Forming:</strong> ${med["Habit Forming"] || "N/A"}</p>
+                            <p><strong>Therapeutic Class:</strong> ${med["Therapeutic Class"] || "N/A"}</p>
+                            <p><strong>Action Class:</strong> ${med["Action Class"] || "N/A"}</p>
+                        </div>`;
+                    });
+                    resultDiv.innerHTML = html;
+                } else if (data.error) {
+                    resultDiv.innerHTML = `<p style="color:red;">${data.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = "No alternatives found.";
+                }
+            } catch (error) {
+                resultDiv.innerHTML = "⚠️ Error fetching data. Is the backend running?";
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
