@@ -4,15 +4,23 @@
     <title>Alternate Medicine Finder</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: sans-serif, sans-serif;
             background: #f8fafd;
             text-align: center;
             padding: 50px;
+            color: #333;
         }
         input {
             padding: 10px;
             font-size: 16px;
             width: 300px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            transition: border-color 0.3s ease;
+        }
+        input:focus {
+            border-color: #4CAF50;
+            outline: none;
         }
         button {
             padding: 10px 20px;
@@ -21,22 +29,48 @@
             background: #4CAF50;
             color: white;
             border: none;
+            border-radius: 5px;
             cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
         }
         .medicine-card {
             text-align: left;
             margin: 20px auto;
             max-width: 600px;
-            padding: 15px;
+            padding: 15px 20px;
             border: 1px solid #ccc;
             border-radius: 8px;
             background: white;
+            box-shadow: 0 2px 5px rgb(0 0 0 / 0.1);
         }
         .medicine-card h4 {
             margin-top: 0;
+            color: #2c3e50;
         }
         strong {
-            color: #333;
+            color: #2c3e50;
+        }
+        .section-title {
+            max-width: 600px;
+            margin: 30px auto 10px auto;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #4CAF50;
+            text-align: left;
+        }
+        .caution {
+            color: #e67e22;
+            font-weight: 700;
+            margin-top: 10px;
+        }
+        #result p {
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -50,14 +84,57 @@
         async function findAlternatives() {
             const input = document.getElementById('medicineInput').value.trim();
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = "Searching...";
+            resultDiv.innerHTML = "<p>Searching...</p>";
 
             try {
                 const response = await fetch(`/recommend?medicine=${encodeURIComponent(input)}`);
                 const data = await response.json();
 
+                // If error or no matches
+                if (data.error) {
+                    resultDiv.innerHTML = `<p style="color:red;">${data.error}</p>`;
+                    return;
+                }
+
+                // We expect your backend to send these fields:
+                // data.substitutes (array), data.side_effects (array), data.message (string), data.recommendations (array)
+                // If not, we'll infer from your original recommendations and input.
+
+                // Let's prepare to show substitutes and side effects of input med too
+                // Assuming backend sends data.input_medicine object (if not, use first recommendation as fallback)
+                const inputMed = data.input_medicine || (data.recommendations && data.recommendations[0]) || null;
+
+                // Show input medicine info first
+                let html = "";
+                if (inputMed) {
+                    html += `<div class="section-title">Input Medicine: ${inputMed.name}</div>`;
+                    html += `<div class="medicine-card">
+                        <p><strong>Substitutes:</strong> ${
+                            [inputMed.substitute0, inputMed.substitute1, inputMed.substitute2, inputMed.substitute3, inputMed.substitute4]
+                            .filter(Boolean).join(", ") || "None"
+                        }</p>
+                        <p><strong>Side Effects:</strong> ${
+                            Array.from({length: 42}, (_, i) => inputMed["sideEffect" + i])
+                                 .filter(Boolean).join(", ") || "None"
+                        }</p>
+                        <p><strong>Uses:</strong> ${
+                            [inputMed.use0, inputMed.use1, inputMed.use2, inputMed.use3, inputMed.use4].filter(Boolean).join(", ") || "None"
+                        }</p>
+                        <p><strong>Chemical Class:</strong> ${inputMed["Chemical Class"] || "N/A"}</p>
+                        <p><strong>Habit Forming:</strong> ${inputMed["Habit Forming"] || "N/A"}</p>
+                        <p><strong>Therapeutic Class:</strong> ${inputMed["Therapeutic Class"] || "N/A"}</p>
+                        <p><strong>Action Class:</strong> ${inputMed["Action Class"] || "N/A"}</p>
+                    </div>`;
+                }
+
+                // Show caution if close match
+                if (data.message && data.message.toLowerCase().includes("close match")) {
+                    html += `<p class="caution">⚠️ Note: The medicine name was not found exactly. Showing the closest match. Please verify carefully.</p>`;
+                }
+
+                // Show recommended alternatives next
                 if (data.recommendations && data.recommendations.length > 0) {
-                    let html = "<h3>Alternatives:</h3>";
+                    html += `<div class="section-title">Recommended Similar Medicines</div>`;
                     data.recommendations.forEach(med => {
                         html += `<div class="medicine-card">
                             <h4>${med.name} (ID: ${med.id})</h4>
@@ -65,9 +142,7 @@
                                 [med.substitute0, med.substitute1, med.substitute2, med.substitute3, med.substitute4].filter(Boolean).join(", ") || "None"
                             }</p>
                             <p><strong>Side Effects:</strong> ${
-                                Array.from({length: 42}, (_, i) => med["sideEffect" + i])
-                                     .filter(Boolean)
-                                     .join(", ") || "None"
+                                Array.from({length: 42}, (_, i) => med["sideEffect" + i]).filter(Boolean).join(", ") || "None"
                             }</p>
                             <p><strong>Uses:</strong> ${
                                 [med.use0, med.use1, med.use2, med.use3, med.use4].filter(Boolean).join(", ") || "None"
@@ -78,14 +153,13 @@
                             <p><strong>Action Class:</strong> ${med["Action Class"] || "N/A"}</p>
                         </div>`;
                     });
-                    resultDiv.innerHTML = html;
-                } else if (data.error) {
-                    resultDiv.innerHTML = `<p style="color:red;">${data.error}</p>`;
                 } else {
-                    resultDiv.innerHTML = "No alternatives found.";
+                    html += "<p>No alternatives found.</p>";
                 }
+
+                resultDiv.innerHTML = html;
             } catch (error) {
-                resultDiv.innerHTML = "⚠️ Error fetching data. Is the backend running?";
+                resultDiv.innerHTML = "<p style='color:red;'>⚠️ Error fetching data. Is the backend running?</p>";
                 console.error(error);
             }
         }

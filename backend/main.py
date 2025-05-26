@@ -36,21 +36,29 @@ def find_best_match(user_input):
 
 @app.get("/recommend")
 def recommend_medicine(medicine: str = Query(...)):
-    idx = find_best_match(medicine)
-    if idx is None:
-        return {"error": "Medicine not found"}
+    names = df["name"].tolist()
+    medicine_lower = medicine.lower().strip()
 
-    # Vectorize the input medicine's combined field
-    user_vector = vectorizer.transform([df.loc[idx, "combined"]])
+    # Try exact match first (case-insensitive)
+    exact_matches = [i for i, name in enumerate(names) if name.lower() == medicine_lower]
+    if exact_matches:
+        idx = exact_matches[0]
+        message = f"Exact match found for '{names[idx]}'."
+    else:
+        # Find closest matches (up to 3) with cutoff 0.3 or higher for caution
+        close_matches = difflib.get_close_matches(medicine_lower, [n.lower() for n in names], n=3, cutoff=0.3)
+        if close_matches:
+            idx = names.index(next(name for name in names if name.lower() == close_matches[0]))
+            message = (
+                f"Exact medicine not found. Showing closest match: '{names[idx]}'. "
+                "Please verify if this is the medicine you intended."
+            )
+        else:
+            return {"error": "Medicine not found. Please check the name and try again."}
 
-    # Compute similarity on the fly
-    cosine_scores = cosine_similarity(user_vector, tfidf_matrix).flatten()
+    input_name = df.loc[idx, "name"]
 
-    # Get top 5 similar (excluding self)
-    top_indices = cosine_scores.argsort()[-6:][::-1]  # top 6 including self
-    top_indices = [i for i in top_indices if i != idx][:5]  # remove self
-
-    # Columns to return
+    # Full input medicine record (all relevant columns)
     cols = [
         "id", "name",
         "substitute0", "substitute1", "substitute2", "substitute3", "substitute4",
@@ -58,9 +66,36 @@ def recommend_medicine(medicine: str = Query(...)):
         "use0", "use1", "use2", "use3", "use4",
         "Chemical Class", "Habit Forming", "Therapeutic Class", "Action Class"
     ]
+    input_medicine = df.loc[idx, cols].to_dict()
+
+    # Substitutes for input medicine (non-empty)
+    substitutes = [s for s in df.loc[idx, ["substitute0", "substitute1", "substitute2", "substitute3", "substitute4"]] if s]
+
+    # Side effects for input medicine (non-empty)
+    side_effect_cols = [f"sideEffect{i}" for i in range(42)]
+    side_effects = [se for se in df.loc[idx, side_effect_cols] if se]
+
+    # Recommendations (similar medicines excluding the input medicine)
+    user_vector = vectorizer.transform([df.loc[idx, "combined"]])
+    cosine_scores = cosine_similarity(user_vector, tfidf_matrix).flatten()
+    top_indices = cosine_scores.argsort()[-6:][::-1]  # top 6 including self
+    top_indices = [i for i in top_indices if i != idx][:5]  # remove self and limit to 5
 
     recommendations = df.iloc[top_indices][cols].to_dict(orient="records")
-    return {"recommendations": recommendations}
+
+    return {
+        "message": message,
+        "input_medicine": input_medicine,
+        "substitutes": substitutes,
+        "side_effects": side_effects,
+        "recommendations": recommendations
+    }
+
+
+
+
+
+
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
